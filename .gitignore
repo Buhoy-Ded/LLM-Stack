@@ -1,0 +1,9 @@
+# Секреты и локальные данные — не в git
+.env
+workspace/
+backups/
+*.tar.gz
+*.log
+
+# Временные файлы
+.DS_Store
