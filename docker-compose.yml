@@ -1,0 +1,100 @@
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:v0.13.4
+    container_name: open-webui
+    ports: 
+      - "3000:8080"
+    volumes:
+      - open-webui:/app/backend/data
+    environment:
+      CHAT_RESPONSE_MAX_TOOL_CALL_ITERATIONS: 6
+      WEBUI_URL: ${WEBUI_URL}
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY}
+      ENABLE_SIGNUP: ${ENABLE_SIGNUP}
+      GLOBAL_LOG_LEVEL: ${GLOBAL_LOG_LEVEL}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
+      AIOHTTP_CLIENT_TIMEOUT: ${AIOHTTP_CLIENT_TIMEOUT}
+      AIOHTTP_CLIENT_STREAM_IDLE_TIMEOUT: ${AIOHTTP_CLIENT_STREAM_IDLE_TIMEOUT}
+      VECTOR_DB: qdrant
+      QDRANT_URI: http://qdrant:6333
+      ENABLE_WEB_SEARCH: "true"
+      WEB_SEARCH_ENGINE: searxng
+      SEARXNG_QUERY_URL: http://searxng:8080/search?q=<query>
+    extra_hosts: 
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - qdrant
+      - searxng
+      - open-terminal
+    networks: 
+      - webui-net
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5).getcode()==200 else 1)"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+
+  qdrant:
+    image: qdrant/qdrant:v1.20.2
+    container_name: qdrant
+    ports: 
+      - "6333:6333"
+    volumes: 
+      - qdrant_data:/qdrant/storage
+    networks: 
+      - webui-net
+    restart: unless-stopped
+
+  searxng:
+    image: searxng/searxng:2026.11.19-368baa340
+    container_name: searxng
+    ports: 
+      - "8080:8080"
+    volumes: 
+      - ./searxng:/etc/searxng
+      - searxng_cache:/var/cache/searxng
+    environment:
+      SEARXNG_BASE_URL: ${SEARXNG_BASE_URL}
+    networks: 
+      - webui-net
+    restart: unless-stopped
+
+  open-terminal:
+    image: ghcr.io/open-webui/open-terminal:0.17.20
+    container_name: open-terminal
+    ports: 
+      - "8000:8000"
+    volumes: 
+      - ./workspace:/home/user
+    environment:
+      OPEN_TERMINAL_API_KEY: ${OPEN_TERMINAL_API_KEY}
+    networks: 
+      - webui-net
+    restart: unless-stopped
+
+volumes:
+  open-webui:
+      # Имя задано явно и совпадает с текущим томом.
+      # Именно поэтому compose подхватит СУЩЕСТВУЮЩИЕ данные, а не создаст
+      # рядом новый пустой том (частая причина «пропали все чаты»).
+      # Сверить: docker volume ls
+      name: ${DATA_VOLUME}
+  qdrant_data:
+  open-terminal-data:
+  searxng_cache:
+
+networks:
+  webui-net:
+    driver: bridge
